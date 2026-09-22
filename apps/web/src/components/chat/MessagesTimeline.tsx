@@ -1766,6 +1766,24 @@ function QueuedMessageTimelineRow({
 }) {
   const ctx = use(TimelineRowCtx);
   const { queuedMessage } = row;
+  const [localVideoPreviewUrls] = useState(
+    () =>
+      new Map(
+        queuedMessage.files.flatMap((file) =>
+          file.file !== null && isVideoAttachment(file)
+            ? [[file.id, URL.createObjectURL(file.file)] as const]
+            : [],
+        ),
+      ),
+  );
+  useEffect(
+    () => () => {
+      for (const previewUrl of localVideoPreviewUrls.values()) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    },
+    [localVideoPreviewUrls],
+  );
   const attachments = [
     ...queuedMessage.images.map((image) => ({
       type: image.type,
@@ -1776,15 +1794,19 @@ function QueuedMessageTimelineRow({
       previewUrl: image.previewUrl,
       ...(image.source ? { source: image.source } : {}),
     })),
-    ...queuedMessage.files.map((file) => ({
-      type: file.type,
-      id: file.id,
-      name: file.name,
-      mimeType: file.mimeType,
-      sizeBytes: file.sizeBytes,
-      downloadable: false,
-      ...(file.source ? { source: file.source } : {}),
-    })),
+    ...queuedMessage.files.map((file) => {
+      const previewUrl = localVideoPreviewUrls.get(file.id);
+      return {
+        type: file.type,
+        id: file.id,
+        name: file.name,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        downloadable: false,
+        ...(previewUrl ? { previewUrl } : {}),
+        ...(file.source ? { source: file.source } : {}),
+      };
+    }),
   ];
   const message: ChatMessage = {
     id: MessageId.make(queuedMessage.id),
@@ -1821,11 +1843,17 @@ function QueuedMessageTimelineRow({
           >
             <Tooltip>
               <TooltipTrigger
-                render={<span className="inline-flex h-6 items-center gap-1" />}
-                aria-label={`Queued. ${statusLabel}.`}
+                render={
+                  <span
+                    className="inline-flex h-6 items-center gap-1"
+                    role="status"
+                    aria-live="polite"
+                  />
+                }
               >
                 <ClockIcon className="size-3.5" aria-hidden />
                 Queued
+                <span className="sr-only">. {statusLabel}.</span>
               </TooltipTrigger>
               <TooltipPopup side="bottom">{statusLabel}</TooltipPopup>
             </Tooltip>

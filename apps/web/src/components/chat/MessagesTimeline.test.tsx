@@ -289,6 +289,9 @@ describe("MessagesTimeline", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("requestAnimationFrame", () => 0);
     vi.stubGlobal("cancelAnimationFrame", () => {});
+    const createObjectURL = vi.fn(() => "blob:queued-video");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
     let renderer: ReactTestRenderer | undefined;
     try {
       await act(() => {
@@ -312,7 +315,16 @@ describe("MessagesTimeline", () => {
                     file: {} as File,
                   },
                 ],
-                files: [],
+                files: [
+                  {
+                    type: "file",
+                    id: "video-1",
+                    name: "walkthrough.mp4",
+                    mimeType: "video/mp4",
+                    sizeBytes: 84,
+                    file: {} as File,
+                  },
+                ],
                 terminalContexts: [],
                 previewAnnotations: [],
                 reviewComments: [],
@@ -332,14 +344,22 @@ describe("MessagesTimeline", () => {
         )
         .join(" ");
       expect(renderer!.root.findAllByType("img")).not.toHaveLength(0);
+      expect(renderer!.root.findByType("video").props).toMatchObject({
+        src: "blob:queued-video",
+        "aria-label": "walkthrough.mp4",
+      });
       expect(visibleText).toContain("screenshot.png");
       expect(visibleText).not.toContain("t3-context://");
-      expect(visibleText).not.toContain("1 attachment");
+      expect(visibleText).not.toContain("2 attachments");
+      expect(renderer!.root.findByProps({ role: "status" }).props["aria-live"]).toBe("polite");
+      expect(visibleText).toContain("Sends after the next tool call or when the turn ends");
       expect(
         renderer!.root.findAll((node) => typeof node.props.onCopyCapture === "function"),
       ).toHaveLength(0);
     } finally {
       await act(() => renderer?.unmount());
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:queued-video");
     }
   });
 
